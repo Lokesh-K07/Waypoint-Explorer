@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Route Results - Waypoint Explorer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        #map-frame { width: 100%; height: 100vh; border: none; }
+        .tourism-button { width: 100%; text-align: left; margin-bottom: 10px; }
+        .input-bar { background-color: #ffffff; padding: 10px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); margin-bottom: 10px; }
+        .suggestions { position: absolute; z-index: 1000; background: white; border: 1px solid #ccc; border-radius: 5px; max-height: 200px; overflow-y: auto; width: 100%; }
+        .suggestion-item { padding: 5px 10px; cursor: pointer; }
+        .suggestion-item:hover { background-color: #f0f0f0; }
+        .swap-btn { cursor: pointer; font-size: 0.8rem; align-self: center; margin-top: 1rem; padding: 5px; }
+        .update-btn-container { display: flex; align-items: center; height: 100%; }
+        .form-control { font-size: 0.9rem; padding: 0.3rem 0.5rem; }
+        .route-details li { list-style: none; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-md-8">
+                <div class="input-bar">
+                    <form id="routeForm">
+                        <div class="row align-items-end">
+                            <div class="col-md-3 mb-2 position-relative">
+                                <label for="start_location" class="form-label">Source</label>
+                                <input type="text" class="form-control" id="start_location" name="start_location" value="{{ start_location }}" placeholder="e.g., Dwaraka Nagar" required autocomplete="off">
+                                <div id="start_suggestions" class="suggestions d-none"></div>
+                            </div>
+                            <div class="col-md-1 mb-2 d-flex justify-content-center">
+                                <span class="swap-btn" id="swap-locations" title="Swap locations"><i class="fas fa-exchange-alt"></i></span>
+                            </div>
+                            <div class="col-md-3 mb-2 position-relative">
+                                <label for="dest_location" class="form-label">Destination</label>
+                                <input type="text" class="form-control" id="dest_location" name="dest_location" value="{{ dest_location }}" placeholder="e.g., Kailasagiri" required autocomplete="off">
+                                <div id="dest_suggestions" class="suggestions d-none"></div>
+                            </div>
+                            <div class="col-md-2 mb-2">
+                                <label for="vehicle_type" class="form-label">Travel By</label>
+                                <select class="form-select" id="vehicle_type" name="vehicle_type">
+                                    <option value="car" {% if vehicle_type == 'car' %}selected{% endif %}>Car</option>
+                                    <option value="bike" {% if vehicle_type == 'bike' %}selected{% endif %}>Bike</option>
+                                    <option value="auto" {% if vehicle_type == 'auto' %}selected{% endif %}>Auto</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2 mb-2 update-btn-container">
+                                <button type="submit" class="btn btn-primary w-100" id="submitBtn" style="white-space: normal; word-wrap: break-word;">
+                                    <span id="btnText">Update Route</span>
+                                    <span id="loadingSpinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="error-message" class="alert alert-danger d-none mt-2"></div>
+                    </form>
+                </div>
+                <iframe id="map-frame" src="{{ map_url }}?start={{ user_coords[0] }},{{ user_coords[1] }}&dest={{ dest_coords[0] }},{{ dest_coords[1] }}" frameborder="0"></iframe>
+            </div>
+            <div class="col-md-4 sidebar">
+                <h2 class="text-center mb-4">Route Overview</h2>
+                <div class="card shadow-sm mb-4">
+                    <div class="card-body">
+                        <h5>Route Details</h5>
+                        <ul class="route-details">
+                            <li>Shortest Route: {{ shortest_time|round(1) }} min via {{ vehicle_type }}</li>
+                            <li>Tourism Route: {{ tourism_time|round(1) }} min via {{ vehicle_type }}</li>
+                        </ul>
+                        <h5>Tourism Places Along Route</h5>
+                        <ul id="tourism-places-list">
+                            {% if tourism_places %}
+                                {% for place in tourism_places %}
+                                    <li>
+                                        <button class="btn btn-outline-primary tourism-button" data-idx="{{ place.idx }}">
+                                            <span class="btn-text">{{ place.name }}</span>
+                                            <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                                        </button>
+                                    </li>
+                                {% endfor %}
+                            {% else %}
+                                <p>No additional tourism places found along your route.</p>
+                            {% endif %}
+                        </ul>
+                    </div>
+                </div>
+                <a href="{{ url_for('index') }}" class="btn btn-secondary w-100">Plan Another Route</a>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        let userCoords = "{{ user_coords[0] }},{{ user_coords[1] }}";
+        let destCoords = "{{ dest_coords[0] }},{{ dest_coords[1] }}";
+        let routeCoords = "{{ route_coords_str }}";
+        let destName = "{{ destination }}";
+        let mainRouteNodes = "{{ main_route_nodes | join(',') }}";
+        let startNode = "{{ start_node }}";
+        let endNode = "{{ end_node }}";
+        let startLocation = "{{ start_location }}";
+        let destLocation = "{{ dest_location }}";
+        let vehicleType = "{{ vehicle_type }}";
+
+        function fetchSuggestions(input, suggestionDiv) {
+            const query = input.value.trim();
+            if (query.length < 2) {
+                suggestionDiv.classList.add('d-none');
+                return;
+            }
+
+            $.get('/autocomplete', { query: query }, function(data) {
+                suggestionDiv.innerHTML = '';
+                if (data && data.length > 0) {
+                    data.forEach(item => {
+                        const div = document.createElement('div');
+                        div.className = 'suggestion-item';
+                        div.textContent = item;
+                        div.onclick = () => {
+                            input.value = item;
+                            suggestionDiv.classList.add('d-none');
+                        };
+                        suggestionDiv.appendChild(div);
+                    });
+                    suggestionDiv.classList.remove('d-none');
+                } else {
+                    suggestionDiv.classList.add('d-none');
+                }
+            }).fail(function() {
+                console.error('Error fetching suggestions');
+                suggestionDiv.classList.add('d-none');
+            });
+        }
+
+        $(document).ready(function() {
+            const startInput = document.getElementById('start_location');
+            const destInput = document.getElementById('dest_location');
+            const startSuggestions = document.getElementById('start_suggestions');
+            const destSuggestions = document.getElementById('dest_suggestions');
+
+            startInput.addEventListener('input', () => fetchSuggestions(startInput, startSuggestions));
+            destInput.addEventListener('input', () => fetchSuggestions(destInput, destSuggestions));
+            document.addEventListener('click', (e) => {
+                if (!startSuggestions.contains(e.target) && e.target !== startInput) startSuggestions.classList.add('d-none');
+                if (!destSuggestions.contains(e.target) && e.target !== destInput) destSuggestions.classList.add('d-none');
+            });
+
+            $('#swap-locations').click(function() {
+                const startVal = $('#start_location').val();
+                const destVal = $('#dest_location').val();
+                $('#start_location').val(destVal);
+                $('#dest_location').val(startVal);
+
+                $('#btnText').addClass('d-none');
+                $('#loadingSpinner').removeClass('d-none');
+                $('#error-message').addClass('d-none');
+
+                $.post('/plan_route', {
+                    start_location: destVal,
+                    dest_location: startVal,
+                    vehicle_type: $('#vehicle_type').val()
+                })
+                    .done(function(response) {
+                        if (response.error) {
+                            $('#error-message').text(response.error).removeClass('d-none');
+                        } else {
+                            updateRoute(response);
+                        }
+                    })
+                    .fail(function(xhr) {
+                        $('#error-message').text('An error occurred while swapping locations. Please try again.').removeClass('d-none');
+                    })
+                    .always(function() {
+                        $('#btnText').removeClass('d-none');
+                        $('#loadingSpinner').addClass('d-none');
+                    });
+            });
+
+            $('#routeForm').submit(function(event) {
+                event.preventDefault();
+                const startLocationNew = $('#start_location').val().trim();
+                const destLocationNew = $('#dest_location').val().trim();
+                const vehicleTypeNew = $('#vehicle_type').val();
+
+                if (!startLocationNew || !destLocationNew) {
+                    $('#error-message').text('Please enter both a source and a destination.').removeClass('d-none');
+                    return;
+                }
+
+                $('#btnText').addClass('d-none');
+                $('#loadingSpinner').removeClass('d-none');
+                $('#error-message').addClass('d-none');
+
+                $.post('/plan_route', {
+                    start_location: startLocationNew,
+                    dest_location: destLocationNew,
+                    vehicle_type: vehicleTypeNew
+                })
+                    .done(function(response) {
+                        if (response.error) {
+                            $('#error-message').text(response.error).removeClass('d-none');
+                        } else {
+                            updateRoute(response);
+                        }
+                    })
+                    .fail(function(xhr) {
+                        $('#error-message').text('An error occurred while updating the route. Please try again.').removeClass('d-none');
+                    })
+                    .always(function() {
+                        $('#btnText').removeClass('d-none');
+                        $('#loadingSpinner').addClass('d-none');
+                    });
+            });
+
+            function updateRoute(response) {
+                $('#map-frame').attr('src', `${response.map_url}?start=${response.user_coords[0]},${response.user_coords[1]}&dest=${response.dest_coords[0]},${response.dest_coords[1]}`);
+                $('.route-details').html(`
+                    <li>Shortest Route: ${response.shortest_time.toFixed(1)} min via ${response.vehicle_type}</li>
+                    <li>Tourism Route: ${response.tourism_time.toFixed(1)} min via ${response.vehicle_type}</li>
+                `);
+
+                const tourismPlaces = response.tourism_places || [];
+                let tourismHtml = tourismPlaces.length ? tourismPlaces.map(place => `
+                    <li><button class="btn btn-outline-primary tourism-button" data-idx="${place.idx}">
+                        <span class="btn-text">${place.name}</span>
+                        <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                    </button></li>
+                `).join('') : '<p>No additional tourism places found along your route.</p>';
+                $('#tourism-places-list').html(tourismHtml);
+
+                userCoords = `${response.user_coords[0]},${response.user_coords[1]}`;
+                destCoords = `${response.dest_coords[0]},${response.dest_coords[1]}`;
+                routeCoords = response.route_coords_str || '';
+                destName = response.destination || '';
+                mainRouteNodes = response.main_route_nodes ? response.main_route_nodes.join(',') : '';
+                startNode = response.start_node || '';
+                endNode = response.end_node || '';
+                startLocation = response.start_location || '';
+                destLocation = response.dest_location || '';
+                vehicleType = response.vehicle_type || '';
+
+                updateTourismButtons(response);
+                window.history.pushState({}, document.title, `/plan_route?start_location=${encodeURIComponent(startLocation)}&dest_location=${encodeURIComponent(destLocation)}&vehicle_type=${vehicleType}`);
+            }
+
+            function updateTourismButtons(response) {
+                $('.tourism-button').off('click').on('click', function() {
+                    const $button = $(this);
+                    $button.find('.btn-text').addClass('d-none');
+                    $button.find('.spinner-border').removeClass('d-none');
+                    const placeIdx = $button.data('idx');
+                    window.location.href = `/tourism_place/${placeIdx}?user_coords=${encodeURIComponent(response.user_coords[0])},${encodeURIComponent(response.user_coords[1])}&dest_coords=${encodeURIComponent(response.dest_coords[0])},${encodeURIComponent(response.dest_coords[1])}&route_coords=${encodeURIComponent(response.route_coords_str)}&dest_name=${encodeURIComponent(response.destination)}&main_route_nodes=${encodeURIComponent(response.main_route_nodes.join(','))}&start_node=${encodeURIComponent(response.start_node)}&end_node=${encodeURIComponent(response.end_node)}&start_location=${encodeURIComponent(response.start_location)}&dest_location=${encodeURIComponent(response.dest_location)}&vehicle_type=${encodeURIComponent(response.vehicle_type)}`;
+                });
+            }
+
+            updateTourismButtons({ user_coords: [userCoords.split(',')[0], userCoords.split(',')[1]], dest_coords: [destCoords.split(',')[0], destCoords.split(',')[1]], route_coords_str: routeCoords, destination: destName, main_route_nodes: mainRouteNodes.split(','), start_node: startNode, end_node: endNode, start_location: startLocation, dest_location: destLocation, vehicle_type: vehicleType });
+        });
+    </script>
+</body>
+</html>
