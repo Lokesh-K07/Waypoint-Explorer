@@ -172,31 +172,21 @@ Each entry includes:
 ---
 
 ## 🖼️ Screenshots
-- Home Page
+- Index Page
      <p align="center">
   <img src="1.jpg" alt="1" height="300" width="600">
    </p>
-- Registration
+- Home Page
   <p align="center">
-  <img src="register.png" alt="2" height="300" width="600">
+  <img src="Home.jpg" alt="2" height="300" width="600">
    </p>
+- Tourism Place Page 
    <p align="center">
-     <img src="register1.png" alt="3" height="300" width="600">
+     <img src="Tourism_Place.jpg" alt="4" height="300" width="600">
    </p>
-- Login  
+- Recommendations  
    <p align="center">
-     <img src="login.png" alt="4" height="300" width="600">
-   </p>
-   <p align="center">
-     <img src="login1.png" alt="5" height="300" width="600">
-   </p>
-- Forgot Password  
-   <p align="center">
-     <img src="fp.png" alt="6" height="300" width="600">
-   </p>
-- Success
-   <p align="center">
-     <img src="welcome.png" alt="7" height="300" width="600">
+     <img src="Recommendations.jpg" alt="6" height="300" width="600">
    </p>
 
 ---
