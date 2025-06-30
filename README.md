@@ -174,7 +174,7 @@ Each entry includes:
 ## 🖼️ Screenshots
 - Home Page
      <p align="center">
-  <img src="1.png" alt="1" height="300" width="600">
+  <img src="1.jpg" alt="1" height="300" width="600">
    </p>
 - Registration
   <p align="center">
