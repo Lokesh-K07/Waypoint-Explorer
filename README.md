@@ -205,4 +205,4 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 
 ⭐ Star this repository if you find it useful!
 
-Thanks for checking out the Voice Authentication System! 🚀  
+Thanks for checking out the Waypoint Explorer! 🚀  
